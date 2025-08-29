@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PowerPoint Compressor</title>
-    <script src="coi-serviceworker.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- FFmpeg for video compression -->
-    <script src="./ffmpeg-core/ffmpeg.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.11.0/ffmpeg.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -438,7 +437,7 @@
                 const { createFFmpeg, fetchFile } = FFmpeg;
                 ffmpeg = createFFmpeg({
                     log: true,
-                    corePath: './ffmpeg-core/ffmpeg-core.js',
+                    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
                 });
 
                 ffmpeg.setLogger(({ type, message }) => {
