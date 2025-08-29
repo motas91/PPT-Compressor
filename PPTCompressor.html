@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PowerPoint Compressor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- FFmpeg for video compression -->
+    <script src="./ffmpeg-core/ffmpeg.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: rgba(0, 0, 102, 0.5);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: #000066;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        .header p { opacity: 0.9; font-size: 1.1rem; }
+
+        .form-container { padding: 40px; }
+        .upload-section { margin-bottom: 40px; }
+
+        .upload-area {
+            border: 3px dashed #000066;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover { border-color: #2980b9; background: #e3f2fd; }
+        .upload-area.dragover { border-color: #27ae60; background: #d5f4e6; }
+
+        .upload-icon { font-size: 3rem; color: #3498db; margin-bottom: 20px; }
+        .upload-text { font-size: 1.2rem; color: #000066; margin-bottom: 10px; }
+        .upload-subtext { color: #7f8c8d; font-size: 0.9rem; }
+
+        #file-input { display: none; }
+
+        .file-info {
+            display: none;
+            background: #e8f5e8;
+            border: 1px solid #4caf50;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 15px;
+            color: #2e7d32;
+        }
+
+        .section {
+            margin-bottom: 35px;
+            padding: 25px;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            background: #fafafa;
+        }
+
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .option-group { margin-bottom: 25px; }
+        .option-group > label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #34495e;
+        }
+
+        .radio-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .radio-item {
+            display: flex;
+            align-items: center;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .radio-item:hover { border-color: #3498db; background: #f0f8ff; }
+        .radio-item.selected { border-color: #3498db; background: #e3f2fd; color: #1976d2; }
+
+        .radio-item input[type="radio"] { margin-right: 8px; }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .checkbox-item:hover { border-color: #3498db; background: #f0f8ff; }
+        .checkbox-item.selected { border-color: #3498db; background: #e3f2fd; color: #1976d2; }
+
+        .checkbox-item input[type="checkbox"] { margin-right: 12px; }
+
+        .compress-button {
+            width: 100%;
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 18px 30px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .compress-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(52, 152, 219, 0.3);
+        }
+
+        .compress-button:disabled { background: #bdc3c7; cursor: not-allowed; }
+
+        .progress-bar {
+            display: none;
+            background: #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+
+        .progress-fill {
+            height: 8px;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            color: #34495e;
+            font-size: 0.9rem;
+        }
+
+        .result-section {
+            display: none;
+            background: #d5f4e6;
+            border: 1px solid #27ae60;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .download-button {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .download-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(39, 174, 96, 0.3);
+        }
+
+        .compression-stats {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            text-align: left;
+        }
+
+        .compression-stats ul { list-style: none; padding: 0; }
+        .compression-stats li { padding: 5px 0; border-bottom: 1px solid #eee; }
+        .compression-stats li:last-child { border-bottom: none; }
+
+        .initialization-notice {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #1565c0;
+            text-align: center;
+            display: none;
+        }
+
+        .ffmpeg-notice {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            color: #856404;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>PowerPoint Compressor</h1>
+            <p>Advanced compression with real image and video processing</p>
+        </div>
+        
+        <div class="form-container">
+            <div class="initialization-notice" id="init-notice">
+                <h4>🚀 Initializing Video Processing Engine...</h4>
+                <p>FFmpeg is loading for advanced video compression. This may take a moment.</p>
+            </div>
+
+            <!-- File Upload -->
+            <div class="upload-section">
+                <div class="upload-area" id="upload-area">
+                    <div class="upload-icon">📎</div>
+                    <div class="upload-text">Click to upload PowerPoint file</div>
+                    <div class="upload-subtext">or drag and drop your .pptx file here</div>
+                </div>
+                <input type="file" id="file-input" accept=".pptx" />
+                <div class="file-info" id="file-info">
+                    <strong>Selected file:</strong> <span id="file-name"></span><br>
+                    <strong>Size:</strong> <span id="file-size"></span>
+                </div>
+            </div>
+
+            <!-- Image Settings -->
+            <div class="section">
+                <h2>🖼️ Image Compression Settings</h2>
+                
+                <div class="option-group">
+                    <label>Resolution for embedded images:</label>
+                    <div class="radio-group">
+                        <div class="radio-item" data-name="image-resolution" data-value="96">
+                            <input type="radio" name="image-resolution" value="96">
+                            <label>96 PPI</label>
+                        </div>
+                        <div class="radio-item selected" data-name="image-resolution" data-value="150">
+                            <input type="radio" name="image-resolution" value="150" checked>
+                            <label>150 PPI</label>
+                        </div>
+                        <div class="radio-item" data-name="image-resolution" data-value="220">
+                            <input type="radio" name="image-resolution" value="220">
+                            <label>220 PPI</label>
+                        </div>
+                        <div class="radio-item" data-name="image-resolution" data-value="none">
+                            <input type="radio" name="image-resolution" value="none">
+                            <label>No Change</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <label>JPEG Quality:</label>
+                    <div class="radio-group">
+                        <div class="radio-item" data-name="image-quality" data-value="0.6">
+                            <input type="radio" name="image-quality" value="0.6">
+                            <label>60% (Smaller)</label>
+                        </div>
+                        <div class="radio-item selected" data-name="image-quality" data-value="0.8">
+                            <input type="radio" name="image-quality" value="0.8" checked>
+                            <label>80% (Balanced)</label>
+                        </div>
+                        <div class="radio-item" data-name="image-quality" data-value="0.9">
+                            <input type="radio" name="image-quality" value="0.9">
+                            <label>90% (Higher Quality)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <div class="checkbox-item" id="convert-png-item">
+                        <input type="checkbox" id="convert-png">
+                        <label>Convert PNG images to JPEG for better compression</label>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <div class="checkbox-item selected" id="delete-cropped-item">
+                        <input type="checkbox" id="delete-cropped" checked>
+                        <label>Delete cropped areas of pictures</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Settings -->
+            <div class="section">
+                <h2>🎥 Video Compression Settings</h2>
+                
+                <div class="option-group">
+                    <label>Resolution for embedded videos:</label>
+                    <div class="radio-group">
+                        <div class="radio-item selected" data-name="video-resolution" data-value="720p">
+                            <input type="radio" name="video-resolution" value="720p" checked>
+                            <label>720p HD</label>
+                        </div>
+                        <div class="radio-item" data-name="video-resolution" data-value="1080p">
+                            <input type="radio" name="video-resolution" value="1080p">
+                            <label>1080p FHD</label>
+                        </div>
+                        <div class="radio-item" data-name="video-resolution" data-value="absolute">
+                            <input type="radio" name="video-resolution" value="absolute">
+                            <label>Window Size</label>
+                        </div>
+                        <div class="radio-item" data-name="video-resolution" data-value="remove">
+                            <input type="radio" name="video-resolution" value="remove">
+                            <label>Remove Videos</label>
+                        </div>
+                        <div class="radio-item" data-name="video-resolution" data-value="none">
+                            <input type="radio" name="video-resolution" value="none">
+                            <label>No Change</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <label>Video Quality (for compression):</label>
+                    <div class="radio-group">
+                        <div class="radio-item" data-name="video-quality" data-value="28">
+                            <input type="radio" name="video-quality" value="28">
+                            <label>Lower Quality</label>
+                        </div>
+                        <div class="radio-item selected" data-name="video-quality" data-value="23">
+                            <input type="radio" name="video-quality" value="23" checked>
+                            <label>Balanced</label>
+                        </div>
+                        <div class="radio-item" data-name="video-quality" data-value="18">
+                            <input type="radio" name="video-quality" value="18">
+                            <label>Higher Quality</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ffmpeg-notice">
+                    <strong>⚡ Real Video Compression:</strong> This tool uses FFmpeg WebAssembly for actual video compression. 
+                    Processing may take time depending on video size and your device's performance.
+                </div>
+            </div>
+
+            <!-- Compress Button -->
+            <button class="compress-button" id="compress-button" disabled>
+                🚀 Compress PowerPoint File
+            </button>
+
+            <!-- Progress Bar -->
+            <div class="progress-bar" id="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+                <div class="progress-text" id="progress-text">Processing...</div>
+            </div>
+
+            <!-- Results -->
+            <div class="result-section" id="result-section">
+                <h3>✅ Compression Complete!</h3>
+                <p><strong>Original size:</strong> <span id="original-size"></span></p>
+                <p><strong>Compressed size:</strong> <span id="compressed-size"></span></p>
+                <p><strong>Space saved:</strong> <span id="space-saved"></span></p>
+                
+                <div class="compression-stats">
+                    <h4>Details:</h4>
+                    <ul id="stats-list"></ul>
+                </div>
+                
+                <button class="download-button" id="download-button">📥 Download Compressed File</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        let compressedBlob = null;
+        let ffmpeg = null;
+        let ffmpegLoaded = false;
+
+        // Initialize when page loads
+        window.addEventListener('load', function() {
+            console.log('Page loaded, initializing...');
+            initializeApp();
+        });
+
+        function initializeApp() {
+            setupFileUpload();
+            setupFormControls();
+            initFFmpeg();
+        }
+
+        // Initialize FFmpeg
+        async function initFFmpeg() {
+            try {
+                const initNotice = document.getElementById('init-notice');
+                if (initNotice) {
+                    initNotice.style.display = 'block';
+                }
+
+                if (typeof FFmpeg === 'undefined') {
+                    throw new Error('FFmpeg not loaded');
+                }
+
+                const { createFFmpeg, fetchFile } = FFmpeg;
+                ffmpeg = createFFmpeg({
+                    log: true,
+                    mainName: 'main',
+                    corePath: './ffmpeg-core/ffmpeg-core.js',
+                    workerPath: './ffmpeg-core/ffmpeg-core.worker.js',
+                });
+
+                ffmpeg.setLogger(({ type, message }) => {
+                    console.log(`FFmpeg [${type}]:`, message);
+                });
+
+                ffmpeg.setProgress(({ ratio }) => {
+                    if (ratio > 0 && ratio < 1) {
+                        const percentage = Math.round(ratio * 100);
+                        updateProgress(60 + percentage * 0.3, `Processing video... ${percentage}%`);
+                    }
+                });
+
+                await ffmpeg.load();
+                
+                ffmpegLoaded = true;
+                if (initNotice) {
+                    initNotice.style.display = 'none';
+                }
+                console.log('FFmpeg loaded successfully');
+            } catch (error) {
+                console.error('Failed to load FFmpeg:', error);
+                ffmpegLoaded = false;
+                const initNotice = document.getElementById('init-notice');
+                if (initNotice) {
+                    initNotice.innerHTML = `
+                        <h4>⚠️ Video Processing Limited</h4>
+                        <p>FFmpeg failed to load. Video compression will be limited to removal only.</p>
+                        <p style="font-size: 0.8rem; color: #c0392b;">Error: ${error.message}</p>
+                    `;
+                }
+            }
+        }
+
+        function setupFileUpload() {
+            const fileInput = document.getElementById('file-input');
+            const uploadArea = document.getElementById('upload-area');
+
+            uploadArea.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+            });
+
+            ['dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, false);
+            });
+
+            uploadArea.addEventListener('dragover', () => uploadArea.classList.add('dragover'));
+            uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+
+            uploadArea.addEventListener('drop', (e) => {
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    if (files[0].name.toLowerCase().endsWith('.pptx')) {
+                        handleFileSelect(files[0]);
+                    } else {
+                        alert('Please select a PowerPoint file (.pptx)');
+                    }
+                }
+            });
+
+            document.getElementById('compress-button').addEventListener('click', compressFile);
+            document.getElementById('download-button').addEventListener('click', downloadFile);
+        }
+
+        function setupFormControls() {
+            document.querySelectorAll('.radio-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const name = this.dataset.name;
+                    document.querySelectorAll(`.radio-item[data-name="${name}"]`).forEach(other => {
+                        other.classList.remove('selected');
+                        other.querySelector('input').checked = false;
+                    });
+                    this.classList.add('selected');
+                    this.querySelector('input').checked = true;
+                });
+            });
+
+            const convertPngItem = document.getElementById('convert-png-item');
+            convertPngItem.addEventListener('click', function() {
+                const checkbox = document.getElementById('convert-png');
+                checkbox.checked = !checkbox.checked;
+                this.classList.toggle('selected', checkbox.checked);
+            });
+
+            const deleteCroppedItem = document.getElementById('delete-cropped-item');
+            deleteCroppedItem.addEventListener('click', function() {
+                const checkbox = document.getElementById('delete-cropped');
+                checkbox.checked = !checkbox.checked;
+                this.classList.toggle('selected', checkbox.checked);
+            });
+        }
+
+        function handleFileSelect(file) {
+            console.log('File selected:', file.name);
+            selectedFile = file;
+            
+            document.getElementById('file-name').textContent = file.name;
+            document.getElementById('file-size').textContent = formatFileSize(file.size);
+            document.getElementById('file-info').style.display = 'block';
+            document.getElementById('compress-button').disabled = false;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function getSettings() {
+            return {
+                imageResolution: document.querySelector('input[name="image-resolution"]:checked').value,
+                imageQuality: parseFloat(document.querySelector('input[name="image-quality"]:checked').value),
+                convertPng: document.getElementById('convert-png').checked,
+                deleteCropped: document.getElementById('delete-cropped').checked,
+                videoResolution: document.querySelector('input[name="video-resolution"]:checked').value,
+                videoQuality: parseInt(document.querySelector('input[name="video-quality"]:checked').value)
+            };
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progress-fill').style.width = percent + '%';
+            document.getElementById('progress-text').textContent = text;
+        }
+
+        async function compressImage(imageBlob, maxDPI, quality, convertToJpeg) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    const scaleFactor = Math.min(1, maxDPI / 300);
+                    canvas.width = Math.max(1, Math.floor(img.width * scaleFactor));
+                    canvas.height = Math.max(1, Math.floor(img.height * scaleFactor));
+                    
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    const outputFormat = convertToJpeg ? 'image/jpeg' : 'image/png';
+                    canvas.toBlob(resolve, outputFormat, quality);
+                };
+                img.src = URL.createObjectURL(imageBlob);
+            });
+        }
+
+        async function compressVideo(videoBlob, resolution, quality, width, height) {
+            if (!ffmpegLoaded) {
+                console.warn("FFmpeg not loaded, skipping video compression.");
+                return null;
+            }
+
+            const { fetchFile } = FFmpeg;
+            const inputFileName = 'input.mp4';
+            const outputFileName = 'output.mp4';
+
+            try {
+                ffmpeg.FS('writeFile', inputFileName, await fetchFile(videoBlob));
+
+                const command = ['-i', inputFileName];
+
+                if (resolution === 'absolute' && width && height && width > 0 && height > 0) {
+                    command.push('-vf', `scale=w='2*trunc(if(gte(iw/ih,${width}/${height}),${width},-2)/2)':h='2*trunc(if(gte(iw/ih,${width}/${height}),-2,${height})/2)'`);
+                } else if (resolution !== 'none' && resolution !== 'absolute') {
+                    command.push('-vf', `scale=-2:${resolution.replace('p', '')}`);
+                }
+
+                command.push(
+                    '-crf', quality.toString(),
+                    '-preset', 'fast',
+                    outputFileName
+                );
+
+                await ffmpeg.run(...command);
+
+                const data = ffmpeg.FS('readFile', outputFileName);
+                return new Blob([data.buffer], { type: 'video/mp4' });
+            } catch (error) {
+                console.error('Error during video compression:', error);
+                return null;
+            } finally {
+                try {
+                    ffmpeg.FS('unlink', inputFileName);
+                    ffmpeg.FS('unlink', outputFileName);
+                } catch (e) {
+                    // Ignore errors during cleanup
+                }
+            }
+        }
+
+        async function cropImage(imageBlob, crop) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    const width = img.width;
+                    const height = img.height;
+
+                    const cropLeft = width * crop.l;
+                    const cropTop = height * crop.t;
+                    const cropWidth = width * (1 - crop.l - crop.r);
+                    const cropHeight = height * (1 - crop.t - crop.b);
+
+                    canvas.width = cropWidth;
+                    canvas.height = cropHeight;
+
+                    ctx.drawImage(img, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+
+                    const outputFormat = imageBlob.type;
+                    canvas.toBlob(resolve, outputFormat);
+                };
+                img.src = URL.createObjectURL(imageBlob);
+            });
+        }
+
+        async function compressFile() {
+
+        
+            if (!selectedFile) return;
+
+            const settings = getSettings();
+            console.log('Compression settings:', settings);
+
+            document.getElementById('progress-bar').style.display = 'block';
+            document.getElementById('result-section').style.display = 'none';
+            document.getElementById('compress-button').disabled = true;
+            document.getElementById('compress-button').textContent = '⏳ Compressing...';
+
+            let originalTotalSize = selectedFile.size;
+            let imagesSaved = 0;
+            let videosSaved = 0;
+            let finalZip;
+
+            try {
+                updateProgress(10, 'Reading PowerPoint file...');
+                const zip = new JSZip();
+                const zipContent = await zip.loadAsync(selectedFile);
+                const mediaFiles = [];
+
+                zipContent.forEach((relativePath, file) => {
+                    if (relativePath.startsWith('ppt/media/') && !file.dir) {
+                        mediaFiles.push({ path: relativePath, file });
+                    }
+                });
+
+                const imageFiles = mediaFiles.filter(f => /\.(jpg|jpeg|png|gif|bmp)$/i.test(f.path));
+                const videoFiles = mediaFiles.filter(f => /\.(mp4|avi|mov|wmv|m4v)$/i.test(f.path));
+
+                if (settings.deleteCropped) {
+                    const slideFiles = Object.keys(zipContent.files).filter(path => path.startsWith('ppt/slides/') && path.endsWith('.xml'));
+                    for (const slidePath of slideFiles) {
+                        const slideContent = await zipContent.file(slidePath).async('string');
+                        const parser = new DOMParser();
+                        const xmlDoc = parser.parseFromString(slideContent, 'text/xml');
+                        const pics = xmlDoc.getElementsByTagName('p:pic');
+
+                        for (const pic of pics) {
+                            const srcRect = pic.querySelector('a\\:srcRect');
+                            if (srcRect) {
+                                const rId = pic.querySelector('a\\:blip').getAttribute('r:embed');
+                                const relsPath = `ppt/slides/_rels/${slidePath.split('/').pop()}.rels`;
+                                const relsContent = await zipContent.file(relsPath).async('string');
+                                const relsDoc = parser.parseFromString(relsContent, 'text/xml');
+                                const rel = relsDoc.querySelector(`Relationship[Id="${rId}"]`);
+                                const imagePath = `ppt/${rel.getAttribute('Target').replace('../', '')}`;
+
+                                const imageFile = imageFiles.find(f => f.path === imagePath);
+                                if (imageFile) {
+                                    const crop = {
+                                        l: parseFloat(srcRect.getAttribute('l')) / 100000,
+                                        t: parseFloat(srcRect.getAttribute('t')) / 100000,
+                                        r: parseFloat(srcRect.getAttribute('r')) / 100000,
+                                        b: parseFloat(srcRect.getAttribute('b')) / 100000
+                                    };
+
+                                    const originalBlob = await imageFile.file.async('blob');
+                                    const croppedBlob = await cropImage(originalBlob, crop);
+
+                                    if (croppedBlob.size < originalBlob.size) {
+                                        imagesSaved += originalBlob.size - croppedBlob.size;
+                                        zipContent.file(imagePath, croppedBlob);
+                                        srcRect.remove();
+                                        zipContent.file(slidePath, new XMLSerializer().serializeToString(xmlDoc));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                updateProgress(25, `Processing ${imageFiles.length} images...`);
+                for (let i = 0; i < imageFiles.length; i++) {
+                    const imageFile = imageFiles[i];
+                    updateProgress(25 + (i / imageFiles.length) * 30, `Compressing image ${i + 1}/${imageFiles.length}...`);
+                    if (settings.imageResolution !== 'none') {
+                        const originalBlob = await imageFile.file.async('blob');
+                        if (originalBlob.size > 5000) {
+                            const shouldConvert = settings.convertPng && imageFile.path.toLowerCase().includes('.png');
+                            const compressed = await compressImage(originalBlob, parseInt(settings.imageResolution), settings.imageQuality, shouldConvert);
+                            if (compressed && compressed.size < originalBlob.size) {
+                                imagesSaved += originalBlob.size - compressed.size;
+                                zipContent.file(imageFile.path, compressed);
+                            }
+                        }
+                    }
+                }
+
+                updateProgress(55, `Processing ${videoFiles.length} videos...`);
+                if (settings.videoResolution === 'remove') {
+                    for (const videoFile of videoFiles) {
+                        const videoBlob = await videoFile.file.async('blob');
+                        videosSaved += videoBlob.size;
+                        zipContent.remove(videoFile.path);
+                    }
+                } else if (settings.videoResolution !== 'none' && ffmpegLoaded) {
+                    const slideFiles = Object.keys(zipContent.files).filter(path => path.startsWith('ppt/slides/') && path.endsWith('.xml'));
+                    for (let i = 0; i < videoFiles.length; i++) {
+                        const videoFile = videoFiles[i];
+                        let width, height;
+
+                        if (settings.videoResolution === 'absolute') {
+                            for (const slidePath of slideFiles) {
+                                const relsPath = `ppt/slides/_rels/${slidePath.split('/').pop()}.rels`;
+                                if (zipContent.files[relsPath]) {
+                                    const relsContent = await zipContent.file(relsPath).async('string');
+                                    const parser = new DOMParser();
+                                    const relsDoc = parser.parseFromString(relsContent, 'text/xml');
+                                    
+                                    let videoRelId = null;
+                                    const relationships = relsDoc.getElementsByTagName('Relationship');
+                                    for (const rel of relationships) {
+                                        if (rel.getAttribute('Type').endsWith('/video')) {
+                                            const targetPath = `ppt/${rel.getAttribute('Target').replace('../', '')}`;
+                                            if (targetPath === videoFile.path) {
+                                                videoRelId = rel.getAttribute('Id');
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    if (videoRelId) {
+                                        const slideContent = await zipContent.file(slidePath).async('string');
+                                        const slideDoc = parser.parseFromString(slideContent, 'text/xml');
+                                        
+                                        let videoElement = null;
+                                        // Videos are linked via 'r:link' in elements like 'a:videoFile' or 'p:videoFile'
+                                        const possibleTags = ['a:videoFile', 'p:videoFile'];
+                                        for (const tagName of possibleTags) {
+                                            const elements = slideDoc.getElementsByTagName(tagName);
+                                            for (const el of elements) {
+                                                if (el.getAttribute('r:link') === videoRelId) {
+                                                    videoElement = el;
+                                                    break;
+                                                }
+                                            }
+                                            if (videoElement) break;
+                                        }
+                                        
+                                        if (videoElement) {
+                                            let shape = videoElement.parentElement;
+                                            while (shape && shape.tagName !== 'p:pic') {
+                                                shape = shape.parentElement;
+                                            }
+                                            if (shape) {
+                                                const spPr = shape.getElementsByTagName('p:spPr')[0];
+                                                if (spPr) {
+                                                    const xfrm = spPr.getElementsByTagName('a:xfrm')[0];
+                                                    if (xfrm) {
+                                                        const ext = xfrm.getElementsByTagName('a:ext')[0];
+                                                        if (ext) {
+                                                            const rawCx = parseInt(ext.getAttribute('cx'));
+                                                            const rawCy = parseInt(ext.getAttribute('cy'));
+                                                            width = Math.round(rawCx / 9525);
+                                                            height = Math.round(rawCy / 9525);
+                                                            console.log(`Extracted raw cx: ${rawCx}, cy: ${rawCy}. Calculated width: ${width}, height: ${height} for video: ${videoFile.path}`);
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        console.log(`Attempting to compress video ${i + 1}/${videoFiles.length}: ${videoFile.path}`);
+                        updateProgress(55 + (i / videoFiles.length) * 35, `Compressing video ${i + 1}/${videoFiles.length}...`);
+                        const originalBlob = await videoFile.file.async('blob');
+                        if (originalBlob.size > 100000) {
+                            console.log(`Video ${i + 1} size: ${formatFileSize(originalBlob.size)}. Proceeding with compression.`);
+                            const compressed = await compressVideo(originalBlob, settings.videoResolution, settings.videoQuality, width, height);
+                            if (compressed && compressed.size < originalBlob.size) {
+                                console.log(`Video ${i + 1} compressed successfully. Original: ${formatFileSize(originalBlob.size)}, Compressed: ${formatFileSize(compressed.size)}`);
+                                videosSaved += originalBlob.size - compressed.size;
+                                zipContent.file(videoFile.path, compressed);
+                            } else {
+                                console.log(`Video ${i + 1} not compressed or not smaller. Keeping original.`);
+                            }
+                        } else {
+                            console.log(`Video ${i + 1} is too small (${formatFileSize(originalBlob.size)}). Skipping compression.`);
+                        }
+                        console.log(`Finished processing video ${i + 1}.`);
+                    }
+                }
+
+                updateProgress(95, 'Finalizing PowerPoint file...');
+                compressedBlob = await zipContent.generateAsync({ type: 'blob' });
+
+                updateProgress(100, 'Compression complete!');
+                displayResults(originalTotalSize, compressedBlob.size, imagesSaved, videosSaved);
+
+            } catch (error) {
+                console.error('An error occurred during compression:', error);
+                alert('An error occurred. Please check the console for details.');
+            } finally {
+                document.getElementById('compress-button').disabled = false;
+                document.getElementById('compress-button').textContent = '🚀 Compress PowerPoint File';
+                document.getElementById('progress-bar').style.display = 'none';
+            }
+        }
+
+        function displayResults(originalSize, compressedSize, imgSaved, vidSaved) {
+            const totalSaved = originalSize - compressedSize;
+            document.getElementById('result-section').style.display = 'block';
+            document.getElementById('original-size').textContent = formatFileSize(originalSize);
+            document.getElementById('compressed-size').textContent = formatFileSize(compressedSize);
+            document.getElementById('space-saved').textContent = `${formatFileSize(totalSaved)} (${((totalSaved / originalSize) * 100).toFixed(1)}%)`;
+
+            const statsList = document.getElementById('stats-list');
+            statsList.innerHTML = `
+                <li>Image compression saved: <strong>${formatFileSize(imgSaved)}</strong></li>
+                <li>Video compression saved: <strong>${formatFileSize(vidSaved)}</strong></li>
+            `;
+        }
+
+        function downloadFile() {
+            if (compressedBlob) {
+                const url = URL.createObjectURL(compressedBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = selectedFile.name.replace(/\.pptx$/i, '_compressed.pptx');
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        }
+    </script>
+</body>
+</html>
